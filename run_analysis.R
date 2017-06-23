@@ -1,43 +1,73 @@
+# loading training data
 
-train_filelist <- list.files(pattern = 'train/*\\.txt',all.files = TRUE,recursive = TRUE)
-# > train_filelist
-# [1] "train/Inertial Signals/body_acc_x_train.txt"  "train/Inertial Signals/body_acc_y_train.txt" 
-# [3] "train/Inertial Signals/body_acc_z_train.txt"  "train/Inertial Signals/body_gyro_x_train.txt"
-# [5] "train/Inertial Signals/body_gyro_y_train.txt" "train/Inertial Signals/body_gyro_z_train.txt"
-# [7] "train/Inertial Signals/total_acc_x_train.txt" "train/Inertial Signals/total_acc_y_train.txt"
-# [9] "train/Inertial Signals/total_acc_z_train.txt" "train/subject_train.txt"                     
-# [11] "train/X_train.txt"                            "train/y_train.txt"                           
-test_filelist <- list.files(pattern = 'test/*\\.txt',all.files = TRUE,recursive = TRUE)
-# > test_filelist
-# [1] "test/Inertial Signals/body_acc_x_test.txt"  "test/Inertial Signals/body_acc_y_test.txt" 
-# [3] "test/Inertial Signals/body_acc_z_test.txt"  "test/Inertial Signals/body_gyro_x_test.txt"
-# [5] "test/Inertial Signals/body_gyro_y_test.txt" "test/Inertial Signals/body_gyro_z_test.txt"
-# [7] "test/Inertial Signals/total_acc_x_test.txt" "test/Inertial Signals/total_acc_y_test.txt"
-# [9] "test/Inertial Signals/total_acc_z_test.txt" "test/subject_test.txt"                     
-# [11] "test/X_test.txt"                            "test/y_test.txt"    
+subject_train <- fread('../GCD3/GettingandCleaningData/train/subject_train.txt')
+trainset <- fread('../GCD3/GettingandCleaningData/train/X_train.txt')
+trainlabel <- fread('../GCD3/GettingandCleaningData/train/y_train.txt')
 
-training <- lapply(train_filelist, fread)
-names(training) <- gsub(".*/.*/(.*).txt$", "\\1", train_filelist)
-# > names(training)
-# [1] "body_acc_x_train"        "body_acc_y_train"        "body_acc_z_train"        "body_gyro_x_train"      
-# [5] "body_gyro_y_train"       "body_gyro_z_train"       "total_acc_x_train"       "total_acc_y_train"      
-# [9] "total_acc_z_train"       "train/subject_train.txt" "train/X_train.txt"       "train/y_train.txt"
-train_all <- do.call(cbind, training)
-# > dim(train_all)
-# [1] 7352 1715
+# loading test data
 
-#do the same for testing
-testing <- lapply(test_filelist,fread)
-names(testing) <- gsub(".*/.*/(.*).txt$", "\\1", test_filelist)
-test_all <- do.call(cbind, testing)
-# > dim(test_all)
-# [1] 2947 1715
+subject_test <- fread('../GCD3/GettingandCleaningData/test/subject_test.txt')
+testset <- fread('../GCD3/GettingandCleaningData/test/X_test.txt')
+testlabel <- fread('../GCD3/GettingandCleaningData/test/y_test.txt')
 
-res <- function(trainpath, testpath){
-  ##load training set and testing  set
-  training <- load(trainpath)
-  testing <- load(testpath)
-  ## 1. Merges the training and the test sets to create one data set.
-  completeSet <- cbind(training, testing)
-  
+#loading features and activity labels
+features <- fread('../GCD3/GettingandCleaningData/features.txt')
+activity_labels <- fread('../GCD3/GettingandCleaningData/activity_labels.txt')
+
+
+#1. Merges the training and the test sets to create one data set.
+#add the columne that indicates who performed the activities
+trainset <- cbind(subject_train, trainlabel, trainset)
+testset <- cbind(subject_test, testlabel, testset)
+
+#merge the training set and the test set
+allset <- rbind(trainset,testset)
+
+#2.Extracts only the measurements on the mean and standard deviation for each measurement.
+
+# Step 1. Assign names to the combined set
+
+names(allset) <- c('Subject','Activity',features[,V2])
+
+#Step 2. Select column names with mean or std, there are 86 columns.Plus the subject and the activity, there are 88 columns
+collist <-grep('(*Mean*)|(*std*)', names(allset), value=TRUE,ignore.case = TRUE)
+meanAndsd <- allset[,c('Subject','Activity',collist),with=FALSE]
+
+# 3.Uses descriptive activity names to name the activities in the data set
+for (i in 1:dim(meanAndsd)[1]){
+  activity_code <- as.numeric(meanAndsd$Activity[i])
+  activity_name <- activity_labels$V2[activity_code]
+  meanAndsd$Activity[i] <- activity_name
 }
+
+# activity_labels
+# V1                 V2
+# 1:  1            WALKING
+# 2:  2   WALKING_UPSTAIRS
+# 3:  3 WALKING_DOWNSTAIRS
+# 4:  4            SITTING
+# 5:  5           STANDING
+# 6:  6             LAYING
+
+# > table(meanAndsd$Activity)
+# 
+# 1    2    3    4    5    6 
+# 1722 1544 1406 1777 1906 1944 
+
+# > table(copy$Activity)
+# 
+# LAYING            SITTING           STANDING            WALKING 
+# 1944               1777               1906               1722 
+# WALKING_DOWNSTAIRS   WALKING_UPSTAIRS 
+# 1406               1544 
+
+#checked the count of different activities match
+
+#4.Appropriately labels the data set with descriptive variable names.
+#Have already done in  2 and 3
+
+#5.From the data set in step 4, creates a second, independent tidy data set with the average of each variable for each activity and each subject.
+
+meanAndsd.melted <- melt(meanAndsd, id = c("Subject", "Activity"))
+meanAndsd.mean <- dcast(meanAndsd.melted, Subject + Activity ~ variable, mean)
+write.table(meanAndsd.mean, "tidy.txt", row.names = FALSE, quote = FALSE)
